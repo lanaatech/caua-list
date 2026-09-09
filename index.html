@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lista de Tripulantes - Missão Cauã</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Configuração de Cores Oficiais do Convite -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        nasaBlue: '#0b3d91',
+                        nasaRed: '#fc3d21'
+                    },
+                    fontFamily: {
+                        sans: ['Helvetica', 'Arial', 'sans-serif'],
+                        mono: ['Courier New', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-[#0b101e] text-slate-100 min-h-screen p-6 md:p-12 font-sans antialiased">
+
+    <div class="max-w-3xl mx-auto">
+        <!-- Cabeçalho (Design idêntico ao seu Print) -->
+        <header class="mb-10 border-b border-slate-700/50 pb-6">
+            <h1 class="text-3xl font-black text-white uppercase tracking-wider">Controle de Embarque</h1>
+            <p class="text-slate-400 mt-2 text-sm">Lista oficial de tripulantes da Missão Cauã 1 Ano.</p>
+            
+            <!-- Contadores Rápidos -->
+            <div id="contadores" class="flex gap-4 mt-6 hidden">
+                <div class="bg-nasaBlue/20 border border-nasaBlue/50 px-4 py-2 rounded-sm flex items-center gap-2">
+                    <span class="text-xs text-nasaBlue font-bold uppercase">Adultos</span>
+                    <span id="total-adultos" class="text-lg font-black text-white">0</span>
+                </div>
+                <div class="bg-nasaRed/20 border border-nasaRed/50 px-4 py-2 rounded-sm flex items-center gap-2">
+                    <span class="text-xs text-nasaRed font-bold uppercase">Crianças</span>
+                    <span id="total-criancas" class="text-lg font-black text-white">0</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Container da Lista -->
+        <div id="lista-convidados" class="space-y-4">
+            <p class="text-slate-400 text-sm animate-pulse flex items-center gap-2">
+                Acessando o banco de dados da missão... ⏳
+            </p>
+        </div>
+    </div>
+
+    <!-- 1. SDK DO SUPABASE (Deve carregar antes de tudo!) -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- 2. NOSSO SCRIPT DE BUSCA -->
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            
+            // Suas Chaves (Exatamente como no convite)
+            const supabaseUrl = 'https://mvekkwmtbjqhpzdjozjm.supabase.co';
+            const supabaseKey = 'sb_publishable_ZvlaKGJMAdOduqa57hgHkQ_5erEOa8w';
+            
+            // Inicializa o cliente com cuidado (usando window)
+            const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+            
+            const container = document.getElementById('lista-convidados');
+            const painelContadores = document.getElementById('contadores');
+            let countAdultos = 0;
+            let countCriancas = 0;
+
+            try {
+                // Busca os dados e traz os mais antigos primeiro (ordem de chegada)
+                const { data, error } = await supabase
+                    .from('rsvp_caua')
+                    .select('*')
+                    .order('created_at', { ascending: true });
+
+                if (error) {
+                    console.error("Erro Supabase:", error);
+                    container.innerHTML = `<p class="text-nasaRed font-bold">Falha na leitura do banco (RLS): ${error.message}</p>`;
+                    return;
+                }
+
+                if (!data || data.length === 0) {
+                    container.innerHTML = '<p class="text-slate-500 text-sm">Nenhum registro encontrado na base.</p>';
+                    return;
+                }
+
+                // Limpa o aviso de carregamento
+                container.innerHTML = ''; 
+
+                // Monta a lista
+                data.forEach((convidado, index) => {
+                    let htmlAcompanhantes = '';
+                    
+                    // Soma o titular nos contadores
+                    if (convidado.categoria === 'Criança') countCriancas++;
+                    else countAdultos++;
+
+                    // Extrai a matemática que salvamos no banco
+                    if (convidado.acompanhantes && convidado.acompanhantes.includes('Total na família:')) {
+                        
+                        // Busca se tem nomes para listar embaixo
+                        if (convidado.acompanhantes.includes('Nomes:')) {
+                            const textoNomes = convidado.acompanhantes.split('Nomes:')[1].trim();
+                            const listaNomes = textoNomes.split(','); 
+                            
+                            // Cria a sub-lista
+                            htmlAcompanhantes = listaNomes.map(nome => {
+                                // Tenta achar se tem a palavra (Criança) no texto
+                                const isCrianca = nome.includes('(Criança)');
+                                const corTag = isCrianca ? 'text-nasaRed' : 'text-slate-400';
+                                
+                                // Soma os acompanhantes nos contadores globais
+                                if (isCrianca) countCriancas++;
+                                else countAdultos++;
+
+                                return `
+                                <li class="ml-4 mt-2 text-xs flex items-center gap-2 text-slate-300">
+                                    <span class="text-slate-600">↳</span>
+                                    ${nome.trim()}
+                                </li>`;
+                            }).join('');
+                        } else if (!convidado.acompanhantes.includes('SIM')) {
+                             htmlAcompanhantes = `<li class="ml-4 mt-2 text-xs text-slate-500 italic flex items-center gap-2"><span class="text-slate-700">↳</span> Voo Solo (Sem tripulação extra)</li>`;
+                        }
+                    }
+
+                    // A cor da "tag" do Titular
+                    const corCategoria = convidado.categoria === 'Criança' ? 'bg-nasaRed/20 text-nasaRed border-nasaRed/30' : 'bg-nasaBlue/20 text-nasaBlue border-nasaBlue/30';
+
+                    // Cria o Card
+                    const card = document.createElement('div');
+                    card.className = "bg-[#0f1629] border border-slate-800 p-4 rounded-sm shadow-lg mb-4";
+                    card.innerHTML = `
+                        <div class="flex justify-between items-center mb-1">
+                            <h2 class="text-base font-bold text-white uppercase">${index + 1}. ${convidado.nome}</h2>
+                            <span class="text-[10px] font-bold px-2 py-1 rounded-sm border uppercase tracking-wider ${corCategoria}">
+                                ${convidado.categoria}
+                            </span>
+                        </div>
+                        <p class="text-xs text-slate-500 mb-3">${convidado.status === 'sim' ? '✓ Presença Confirmada' : '✗ Não Comparecerá'} • Telefone: ${convidado.telefone}</p>
+                        <ul>
+                            ${htmlAcompanhantes}
+                        </ul>
+                    `;
+                    container.appendChild(card);
+                });
+
+                // Atualiza e mostra os contadores no topo
+                document.getElementById('total-adultos').innerText = countAdultos;
+                document.getElementById('total-criancas').innerText = countCriancas;
+                painelContadores.classList.remove('hidden');
+
+            } catch (err) {
+                console.error("Erro fatal:", err);
+                container.innerHTML = `<p class="text-nasaRed font-bold">Falha de conexão com a API.</p>`;
+            }
+        });
+    </script>
+</body>
+</html>
